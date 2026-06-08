@@ -3,7 +3,35 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
+import plotly.io as pio
 from plotly.subplots import make_subplots
+
+# ── Global Chart Theme ────────────────────────────────
+pio.templates["dark_custom"] = go.layout.Template(
+    layout=go.Layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="#1a1a2e",
+        font=dict(color="#e0e0e0", size=12),
+        xaxis=dict(
+            gridcolor="#2a2a3e",
+            linecolor="#444",
+            tickcolor="#e0e0e0",
+            color="#e0e0e0"
+        ),
+        yaxis=dict(
+            gridcolor="#2a2a3e",
+            linecolor="#444",
+            tickcolor="#e0e0e0",
+            color="#e0e0e0"
+        ),
+        legend=dict(
+            bgcolor="rgba(0,0,0,0.3)",
+            bordercolor="#444",
+            font=dict(color="#e0e0e0")
+        )
+    )
+)
+pio.templates.default = "dark_custom"
 
 # ── Page Config ───────────────────────────────────────
 st.set_page_config(
@@ -98,38 +126,53 @@ with tab1:
                          subplot_titles=("CE Options Decay", "PE Options Decay"))
 
     for i, opt in enumerate(["CE", "PE"], 1):
-        data = decay_curve[decay_curve["option_type"] == opt].sort_values("dte")
+        data  = decay_curve[decay_curve["option_type"] == opt].sort_values("dte")
         color = "#2196F3" if opt == "CE" else "#F44336"
+        fill  = "rgba(33,150,243,0.15)" if opt == "CE" else "rgba(244,67,54,0.15)"
 
         fig1.add_trace(go.Scatter(
             x=data["dte"], y=data["median_premium"],
             mode="lines+markers", name=f"{opt} Premium",
             line=dict(color=color, width=2.5),
             marker=dict(size=6),
-            fill="tozeroy", fillcolor=f"rgba{'(33,150,243,0.1)' if opt=='CE' else '(244,67,54,0.1)'}"
+            fill="tozeroy", fillcolor=fill
         ), row=1, col=i)
 
-        # Decay annotation
-        d15 = data[data["dte"]==15]["median_premium"].values
-        d2  = data[data["dte"]==2]["median_premium"].values
+        d15 = data[data["dte"] == 15]["median_premium"].values
+        d2  = data[data["dte"] == 2]["median_premium"].values
         if len(d15) and len(d2):
             pct = (d15[0] - d2[0]) / d15[0] * 100
             fig1.add_annotation(
                 x=8, y=data["median_premium"].max() * 0.8,
                 text=f"Decay DTE-15→DTE-2:<br><b>{pct:.1f}%</b>",
                 showarrow=False, row=1, col=i,
-                bgcolor="lightyellow", bordercolor="orange"
+                bgcolor="#2a2a3e",
+                bordercolor="#F4B942",
+                font=dict(color="#F4B942")
             )
 
-    fig1.update_xaxes(autorange="reversed", title_text="Days to Expiry (DTE)")
-    fig1.update_yaxes(title_text="Median Premium (₹)", col=1)
-    fig1.update_layout(height=450, showlegend=True,
-                       plot_bgcolor="white", paper_bgcolor="white")
+    fig1.update_xaxes(
+        autorange="reversed",
+        title_text="Days to Expiry (DTE)",
+        gridcolor="#2a2a3e", color="#e0e0e0"
+    )
+    fig1.update_yaxes(
+        title_text="Median Premium (₹)", col=1,
+        gridcolor="#2a2a3e", color="#e0e0e0"
+    )
+    fig1.update_layout(
+        height=450,
+        showlegend=True,
+        plot_bgcolor="#1a1a2e",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#e0e0e0"),
+        legend=dict(bgcolor="rgba(0,0,0,0.3)", font=dict(color="#e0e0e0"))
+    )
     st.plotly_chart(fig1, use_container_width=True)
 
-    col1, col2 = st.columns(2)
-    col1.info("💡 **Key Finding:** CE premiums lose **61.7%** of value from DTE-15 to DTE-2")
-    col2.info("💡 **Key Finding:** PE premiums lose **58.1%** of value from DTE-15 to DTE-2")
+    c1, c2 = st.columns(2)
+    c1.info("💡 **Key Finding:** CE premiums lose **61.7%** of value from DTE-15 to DTE-2")
+    c2.info("💡 **Key Finding:** PE premiums lose **58.1%** of value from DTE-15 to DTE-2")
 
 # ════════════════════════════════════════════════════
 # TAB 2 — MAX PAIN & OI
@@ -146,25 +189,22 @@ with tab2:
                 (exp_data["option_type"] == "CE") &
                 (exp_data["strike"] < s)
             ]["open_interest"].sum()
-
             pe_loss = exp_data[
                 (exp_data["option_type"] == "PE") &
                 (exp_data["strike"] > s)
             ]["open_interest"].sum()
-
             pain[s] = ce_loss + pe_loss
-
         return min(pain, key=pain.get) if pain else None
 
-    expiries = df_near["expiry"].unique()
+    expiries   = df_near["expiry"].unique()
     mp_results = []
 
     for exp in sorted(expiries):
         exp_data = df_near[
             (df_near["expiry"] == exp) &
-            (df_near["dte"] == df_near[df_near["expiry"]==exp]["dte"].min())
+            (df_near["dte"] == df_near[df_near["expiry"] == exp]["dte"].min())
         ]
-        mp = calculate_max_pain(exp_data)
+        mp         = calculate_max_pain(exp_data)
         underlying = exp_data["underlying_price"].median()
         if mp and underlying:
             mp_results.append({
@@ -176,39 +216,63 @@ with tab2:
 
     mp_df = pd.DataFrame(mp_results).sort_values("expiry")
 
-    fig2 = make_subplots(rows=2, cols=1,
-                         subplot_titles=(
-                             "Max Pain vs NIFTY Close",
-                             "Gap % Between Max Pain and Expiry Close"
-                         ), row_heights=[0.6, 0.4])
+    fig2 = make_subplots(
+        rows=2, cols=1,
+        subplot_titles=(
+            "Max Pain vs NIFTY Close",
+            "Gap % Between Max Pain and Expiry Close"
+        ),
+        row_heights=[0.6, 0.4]
+    )
 
     fig2.add_trace(go.Scatter(
         x=mp_df["expiry"], y=mp_df["underlying_close"],
-        name="NIFTY Close", line=dict(color="#2196F3", width=2),
-        mode="lines+markers"
+        name="NIFTY Close",
+        line=dict(color="#2196F3", width=2.5),
+        mode="lines+markers",
+        marker=dict(size=6)
     ), row=1, col=1)
 
     fig2.add_trace(go.Scatter(
         x=mp_df["expiry"], y=mp_df["max_pain"],
-        name="Max Pain", line=dict(color="#FF5722", width=2, dash="dash"),
-        mode="lines+markers", marker=dict(symbol="square")
+        name="Max Pain",
+        line=dict(color="#FF5722", width=2.5, dash="dash"),
+        mode="lines+markers",
+        marker=dict(symbol="square", size=6)
     ), row=1, col=1)
 
-    colors_bar = ["#4CAF50" if v < 0.2 else "#FF9800" if v < 0.5 else "#F44336"
-                  for v in mp_df["diff_pct"]]
+    colors_bar = [
+        "#4CAF50" if v < 0.2 else "#FF9800" if v < 0.5 else "#F44336"
+        for v in mp_df["diff_pct"]
+    ]
 
     fig2.add_trace(go.Bar(
         x=mp_df["expiry"], y=mp_df["diff_pct"],
         name="Gap %", marker_color=colors_bar
     ), row=2, col=1)
 
-    fig2.add_hline(y=mp_df["diff_pct"].mean(), line_dash="dot",
-                   line_color="red", row=2, col=1,
-                   annotation_text=f"Avg: {mp_df['diff_pct'].mean():.2f}%")
+    fig2.add_hline(
+        y=mp_df["diff_pct"].mean(),
+        line_dash="dot", line_color="#F4B942",
+        annotation_text=f"Avg: {mp_df['diff_pct'].mean():.2f}%",
+        annotation_font_color="#F4B942",
+        row=2, col=1
+    )
 
-    fig2.update_layout(height=600, plot_bgcolor="white", paper_bgcolor="white")
+    fig2.update_layout(
+        height=600,
+        plot_bgcolor="#1a1a2e",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#e0e0e0"),
+        legend=dict(bgcolor="rgba(0,0,0,0.3)", font=dict(color="#e0e0e0"))
+    )
+    fig2.update_xaxes(gridcolor="#2a2a3e", color="#e0e0e0")
+    fig2.update_yaxes(gridcolor="#2a2a3e", color="#e0e0e0")
     st.plotly_chart(fig2, use_container_width=True)
-    st.success(f"💡 **Key Finding:** NIFTY expired within **0.24%** of max pain level on average across {len(mp_df)} expiries")
+    st.success(
+        f"💡 **Key Finding:** NIFTY expired within **0.24%** of max pain level "
+        f"on average across {len(mp_df)} expiries"
+    )
 
 # ════════════════════════════════════════════════════
 # TAB 3 — PCR SIGNAL
@@ -220,28 +284,32 @@ with tab3:
     pcr_daily = df_near.groupby(
         ["date", "option_type"]
     )["open_interest"].sum().unstack()
-    pcr_daily.columns = ["CE_OI", "PE_OI"]
-    pcr_daily["PCR"] = pcr_daily["PE_OI"] / pcr_daily["CE_OI"]
-    pcr_daily = pcr_daily.reset_index()
+    pcr_daily.columns  = ["CE_OI", "PE_OI"]
+    pcr_daily["PCR"]   = pcr_daily["PE_OI"] / pcr_daily["CE_OI"]
+    pcr_daily          = pcr_daily.reset_index()
 
     daily_underlying = df.groupby("date")["underlying_price"].median().reset_index()
     daily_underlying = daily_underlying.sort_values("date")
-    daily_underlying["next_day_return"] = daily_underlying["underlying_price"].pct_change().shift(-1) * 100
+    daily_underlying["next_day_return"] = (
+        daily_underlying["underlying_price"].pct_change().shift(-1) * 100
+    )
     daily_underlying["next_day_direction"] = daily_underlying["next_day_return"].apply(
         lambda x: "UP" if x > 0 else "DOWN"
     )
 
-    pcr_analysis = pcr_daily.merge(daily_underlying, on="date", how="inner").dropna()
+    pcr_analysis = pcr_daily.merge(
+        daily_underlying, on="date", how="inner"
+    ).dropna()
 
     def pcr_signal(pcr):
-        if pcr > 1.1:   return "BULLISH"
+        if pcr > 1.1:    return "BULLISH"
         elif pcr < 0.85: return "BEARISH"
         else:            return "NEUTRAL"
 
     pcr_analysis["signal"] = pcr_analysis["PCR"].apply(pcr_signal)
 
-    bullish = pcr_analysis[pcr_analysis["signal"] == "BULLISH"]
-    bearish = pcr_analysis[pcr_analysis["signal"] == "BEARISH"]
+    bullish  = pcr_analysis[pcr_analysis["signal"] == "BULLISH"]
+    bearish  = pcr_analysis[pcr_analysis["signal"] == "BEARISH"]
     bull_acc = (bullish["next_day_direction"] == "UP").mean() * 100
     bear_acc = (bearish["next_day_direction"] == "DOWN").mean() * 100
     total    = len(bullish) + len(bearish)
@@ -249,35 +317,70 @@ with tab3:
                (bearish["next_day_direction"] == "DOWN").sum()
     overall  = correct / total * 100 if total > 0 else 0
 
-    # Metric cards
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Bullish Accuracy", f"{bull_acc:.1f}%", f"n={len(bullish)}")
     c2.metric("Bearish Accuracy", f"{bear_acc:.1f}%", f"n={len(bearish)}")
     c3.metric("Overall Accuracy", f"{overall:.1f}%",  f"n={total}")
     c4.metric("Avg PCR",          f"{pcr_analysis['PCR'].mean():.3f}")
 
-    fig3 = make_subplots(rows=2, cols=1,
-                         subplot_titles=("PCR Over Time with Signals", "NIFTY Price with Signal Overlay"),
-                         row_heights=[0.5, 0.5])
+    fig3 = make_subplots(
+        rows=2, cols=1,
+        subplot_titles=(
+            "PCR Over Time with Signal Thresholds",
+            "NIFTY Price with Signal Overlay"
+        ),
+        row_heights=[0.5, 0.5]
+    )
 
     fig3.add_trace(go.Scatter(
         x=pcr_analysis["date"], y=pcr_analysis["PCR"],
-        name="PCR", line=dict(color="#555", width=1.5)
+        name="PCR", line=dict(color="#e0e0e0", width=1.5)
     ), row=1, col=1)
 
-    fig3.add_hline(y=1.1,  line_dash="dash", line_color="green",
-                   annotation_text="Bullish (1.1)", row=1, col=1)
-    fig3.add_hline(y=0.85, line_dash="dash", line_color="red",
-                   annotation_text="Bearish (0.85)", row=1, col=1)
+    fig3.add_hline(
+        y=1.1, line_dash="dash", line_color="#4CAF50",
+        annotation_text="Bullish (1.1)",
+        annotation_font_color="#4CAF50",
+        row=1, col=1
+    )
+    fig3.add_hline(
+        y=0.85, line_dash="dash", line_color="#F44336",
+        annotation_text="Bearish (0.85)",
+        annotation_font_color="#F44336",
+        row=1, col=1
+    )
 
     fig3.add_trace(go.Scatter(
         x=pcr_analysis["date"], y=pcr_analysis["underlying_price"],
         name="NIFTY", line=dict(color="#2196F3", width=2)
     ), row=2, col=1)
 
-    fig3.update_layout(height=550, plot_bgcolor="white", paper_bgcolor="white")
+    # Shade signal zones on NIFTY chart
+    for _, row_data in bullish.iterrows():
+        fig3.add_vrect(
+            x0=row_data["date"], x1=row_data["date"] + pd.Timedelta(days=1),
+            fillcolor="#4CAF50", opacity=0.2, line_width=0, row=2, col=1
+        )
+    for _, row_data in bearish.iterrows():
+        fig3.add_vrect(
+            x0=row_data["date"], x1=row_data["date"] + pd.Timedelta(days=1),
+            fillcolor="#F44336", opacity=0.1, line_width=0, row=2, col=1
+        )
+
+    fig3.update_layout(
+        height=580,
+        plot_bgcolor="#1a1a2e",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#e0e0e0"),
+        legend=dict(bgcolor="rgba(0,0,0,0.3)", font=dict(color="#e0e0e0"))
+    )
+    fig3.update_xaxes(gridcolor="#2a2a3e", color="#e0e0e0")
+    fig3.update_yaxes(gridcolor="#2a2a3e", color="#e0e0e0")
     st.plotly_chart(fig3, use_container_width=True)
-    st.info(f"💡 **Key Finding:** PCR signal achieved **{overall:.1f}% overall accuracy** across {total} signals vs 50% random baseline")
+    st.info(
+        f"💡 **Key Finding:** PCR signal achieved **{overall:.1f}% overall accuracy** "
+        f"across {total} signals vs 50% random baseline"
+    )
 
 # ════════════════════════════════════════════════════
 # TAB 4 — IV ANALYSIS
@@ -294,8 +397,9 @@ with tab4:
         (df_near["underlying_price"] > 0)
     ].copy()
 
-    iv_data["iv_proxy"] = (iv_data["close"] / iv_data["underlying_price"]) * \
-                           np.sqrt(365 / iv_data["dte"]) * 100
+    iv_data["iv_proxy"] = (
+        iv_data["close"] / iv_data["underlying_price"]
+    ) * np.sqrt(365 / iv_data["dte"]) * 100
     iv_data = iv_data[iv_data["iv_proxy"] < 100]
 
     iv_curve = iv_data.groupby(
@@ -307,37 +411,62 @@ with tab4:
     )["iv_proxy"].mean().reset_index()
     iv_by_expiry["expiry"] = pd.to_datetime(iv_by_expiry["expiry"])
 
-    fig4 = make_subplots(rows=1, cols=2,
-                         subplot_titles=(
-                             "IV Proxy vs Days to Expiry",
-                             "Average IV per Expiry Cycle"
-                         ))
+    fig4 = make_subplots(
+        rows=1, cols=2,
+        subplot_titles=(
+            "IV Proxy vs Days to Expiry",
+            "Average IV per Expiry Cycle"
+        )
+    )
 
     for opt in ["CE", "PE"]:
-        data = iv_curve[iv_curve["option_type"] == opt].sort_values("dte")
+        data  = iv_curve[iv_curve["option_type"] == opt].sort_values("dte")
         color = "#2196F3" if opt == "CE" else "#F44336"
         fig4.add_trace(go.Scatter(
             x=data["dte"], y=data["iv_proxy"],
-            name=f"{opt} IV", line=dict(color=color, width=2),
-            mode="lines+markers"
+            name=f"{opt} IV",
+            line=dict(color=color, width=2.5),
+            mode="lines+markers",
+            marker=dict(size=6)
         ), row=1, col=1)
 
-    ce_iv = iv_by_expiry[iv_by_expiry["option_type"]=="CE"].sort_values("expiry")
-    pe_iv = iv_by_expiry[iv_by_expiry["option_type"]=="PE"].sort_values("expiry")
+    ce_iv = iv_by_expiry[iv_by_expiry["option_type"] == "CE"].sort_values("expiry")
+    pe_iv = iv_by_expiry[iv_by_expiry["option_type"] == "PE"].sort_values("expiry")
 
     fig4.add_trace(go.Scatter(
         x=ce_iv["expiry"], y=ce_iv["iv_proxy"],
-        name="CE Avg IV", line=dict(color="#2196F3", width=2),
-        mode="lines+markers"
+        name="CE Avg IV",
+        line=dict(color="#2196F3", width=2),
+        mode="lines+markers", marker=dict(size=5)
     ), row=1, col=2)
 
     fig4.add_trace(go.Scatter(
         x=pe_iv["expiry"], y=pe_iv["iv_proxy"],
-        name="PE Avg IV", line=dict(color="#F44336", width=2),
-        mode="lines+markers"
+        name="PE Avg IV",
+        line=dict(color="#F44336", width=2),
+        mode="lines+markers", marker=dict(size=5)
     ), row=1, col=2)
 
-    fig4.update_xaxes(autorange="reversed", title_text="Days to Expiry", col=1)
-    fig4.update_layout(height=450, plot_bgcolor="white", paper_bgcolor="white")
+    fig4.update_xaxes(
+        autorange="reversed",
+        title_text="Days to Expiry",
+        gridcolor="#2a2a3e", color="#e0e0e0",
+        col=1
+    )
+    fig4.update_xaxes(
+        gridcolor="#2a2a3e", color="#e0e0e0",
+        col=2
+    )
+    fig4.update_yaxes(gridcolor="#2a2a3e", color="#e0e0e0")
+    fig4.update_layout(
+        height=450,
+        plot_bgcolor="#1a1a2e",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#e0e0e0"),
+        legend=dict(bgcolor="rgba(0,0,0,0.3)", font=dict(color="#e0e0e0"))
+    )
     st.plotly_chart(fig4, use_container_width=True)
-    st.warning("💡 **Key Finding:** IV rises into expiry — spikes in final 2 days, contrary to traditional IV crush assumption in weekly NIFTY options")
+    st.warning(
+        "💡 **Key Finding:** IV rises into expiry — spikes in final 2 days, "
+        "contrary to traditional IV crush assumption in weekly NIFTY options"
+    )
